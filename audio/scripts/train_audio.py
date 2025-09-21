@@ -32,3 +32,11 @@ val_dataset = TensorDataset(X_val, y_val)
 
 model = CNN(**hyperparams)
 final_model = train_model(model, train_dataset, val_dataset, **hyperparams)
+os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+
+torch.save(final_model.state_dict(), os.path.join(CHECKPOINT_DIR, "best_final_model.pth"))
+pkl_path = os.path.join(CHECKPOINT_DIR, "audio_model.pkl")
+with open(pkl_path, "wb") as f:
+    pickle.dump(final_model, f)
+
+print(f"Model saved at {pkl_path}")
