@@ -22,7 +22,7 @@ COPY . .
 
 # Set environment variables
 ENV PORT 8080
-ENV GEMINI_API_KEY="AIzaSyAImUuxo1t3jipw2IF0AY5FB5-N4y8enzg"
+ENV GEMINI_API_KEY=AIzaSyAImUuxo1t3jipw2IF0AY5FB5-N4y8enzg
 
 # Expose port
 EXPOSE 8080
