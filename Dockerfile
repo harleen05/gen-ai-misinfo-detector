@@ -1,34 +1,31 @@
-# Use official Python 3.11 slim image
-FROM python:3.11-slim
+# Use Python slim image
+FROM python:3.10-slim
 
-# Set working directory
+# Prevent interactive prompts
+ENV PYTHONUNBUFFERED True
+
+# Set work directory
 WORKDIR /app
 
-# Install system dependencies required for image/audio processing
+# Install system dependencies (needed for librosa, PIL, etc.)
 RUN apt-get update && apt-get install -y \
-    build-essential \
+    ffmpeg \
     libsndfile1 \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first (for caching)
+# Copy requirements first
 COPY requirements.txt .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the application code and model files
+# Copy all app files
 COPY . .
 
-# Set environment variable for Cloud Run port
-ENV PORT=8080
+# Set environment variables
+ENV PORT 8080
+ENV GEMINI_API_KEY="AIzaSyAImUuxo1t3jipw2IF0AY5FB5-N4y8enzg"
 
 # Expose port
 EXPOSE 8080
 
-# Start the Flask app with gunicorn for production
-CMD ["gunicorn", "-b", "0.0.0.0:8080", "app:app"]
+# Run Flask
+CMD ["python", "app.py"]
