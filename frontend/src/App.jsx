@@ -1,40 +1,6 @@
-// import { useState } from 'react'
-// import reactLogo from './assets/react.svg'
-// import viteLogo from '/vite.svg'
-// import './App.css'
-
-// function App() {
-//   const [count, setCount] = useState(0)
-
-//   return (
-//     <>
-//       <div>
-//         <a href="https://vite.dev" target="_blank">
-//           <img src={viteLogo} className="logo" alt="Vite logo" />
-//         </a>
-//         <a href="https://react.dev" target="_blank">
-//           <img src={reactLogo} className="logo react" alt="React logo" />
-//         </a>
-//       </div>
-//       <h1>Vite + React</h1>
-//       <div className="card">
-//         <button onClick={() => setCount((count) => count + 1)}>
-//           count is {count}
-//         </button>
-//         <p>
-//           Edit <code>src/App.jsx</code> and save to test HMR
-//         </p>
-//       </div>
-//       <p className="read-the-docs">
-//         Click on the Vite and React logos to learn more
-//       </p>
-//     </>
-//   )
-// }
-
-// export default App
-
 import React, { useState } from 'react';
+
+const API_BASE = "https://deepfake-api-217279920936.us-central1.run.app";
 
 const DeepfakeDetector = () => {
   const [detectionType, setDetectionType] = useState('audio');
@@ -91,7 +57,7 @@ const DeepfakeDetector = () => {
     setIsProcessing(true);
     
     try {
-      // TODO: Replace with your Flask backend endpoint
+      // API call to your Google Cloud deployed Flask backend
       const formData = new FormData();
       
       if (detectionType === 'text' && textInput.trim()) {
@@ -102,8 +68,7 @@ const DeepfakeDetector = () => {
       
       formData.append('detection_type', detectionType);
 
-      // Example API call structure - replace URL with your Flask backend
-      const response = await fetch('http://localhost:5000/api/detect', {
+      const response = await fetch(`${API_BASE}/api/detect`, {
         method: 'POST',
         body: formData
       });
