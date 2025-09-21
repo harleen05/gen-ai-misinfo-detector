@@ -1,0 +1,168 @@
+/* Basic Reset & Font */
+body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f0f2f5;
+    color: #333;
+    width: 300px;
+    box-sizing: border-box;
+}
+
+/* Container */
+.container {
+    padding: 20px;
+    background-color: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e0e0e0;
+}
+
+/* Header */
+header {
+    text-align: center;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #e0e0e0;
+    padding-bottom: 15px;
+}
+
+header h1 {
+    font-size: 1.5rem;
+    color: #2c3e50;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.shield-icon {
+    font-size: 1.8rem;
+    margin-right: 8px;
+    color: #3498db;
+}
+
+/* Sections */
+.detection-options,
+.file-upload-section {
+    margin-bottom: 20px;
+}
+
+.detection-options p,
+.file-upload-section p {
+    margin: 0 0 8px 0;
+    font-weight: 500;
+    color: #555;
+}
+
+/* Select Dropdown */
+.select-wrapper {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+}
+
+select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    background-color: #f9f9f9;
+    font-size: 1rem;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    cursor: pointer;
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+select:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+}
+
+/* Custom File Upload */
+.file-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.custom-file-upload {
+    background-color: #3498db;
+    color: #fff;
+    padding: 10px 15px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s, transform 0.2s;
+    font-weight: 600;
+    border: none;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.custom-file-upload:hover {
+    background-color: #2980b9;
+}
+
+.custom-file-upload:active {
+    transform: translateY(1px);
+}
+
+input[type="file"] {
+    display: none;
+}
+
+#file-name {
+    font-size: 0.9rem;
+    color: #777;
+    flex-grow: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Run Detection Button */
+#run-detection-btn {
+    width: 100%;
+    padding: 12px;
+    background-color: #2ecc71;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.3s, transform 0.2s;
+    margin-top: 10px;
+}
+
+#run-detection-btn:hover {
+    background-color: #27ae60;
+}
+
+#run-detection-btn:active {
+    transform: translateY(1px);
+}
+
+#run-detection-btn:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+
+/* Tip Section */
+.tip-container {
+    margin-top: 20px;
+    display: flex;
+    align-items: center;
+    font-size: 0.85rem;
+    color: #7f8c8d;
+    background-color: #f5f6f7;
+    padding: 10px;
+    border-radius: 8px;
+}
+
+.tip-icon {
+    margin-right: 8px;
+    font-size: 1.2rem;
+}

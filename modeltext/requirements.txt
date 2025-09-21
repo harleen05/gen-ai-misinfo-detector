@@ -1,0 +1,14 @@
+numpy
+pandas
+scikit-learn
+nltk
+torch
+transformers
+datasets
+evaluate
+tqdm
+matplotlib
+seaborn
+joblib
+python-dotenv
+wandb

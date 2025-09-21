@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deepfake Detector</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><span class="shield-icon">🛡️</span> Deepfake Detector</h1>
+        </header>
+
+        <section class="detection-options">
+            <p>Select a detection type:</p>
+            <div class="select-wrapper">
+                <select id="detection-type">
+                    <option value="audio">Audio Detection</option>
+                    <option value="video">Video Detection</option>
+                    <option value="text">Text Detection</option>
+                </select>
+            </div>
+        </section>
+
+        <section class="file-upload-section">
+            <p id="file-instruction">Select an audio file (mp3, wav):</p>
+            <div class="file-input-wrapper">
+                <label for="file-upload" class="custom-file-upload">
+                    Choose File
+                </label>
+                <input type="file" id="file-upload" accept=".mp3,.wav">
+                <span id="file-name">No file chosen</span>
+            </div>
+        </section>
+
+        <button id="run-detection-btn">Run Detection</button>
+
+        <div class="tip-container">
+            <span class="tip-icon">💡</span>
+            <span class="tip-text">Tip: Keep files < 50 MB for faster results.</span>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
