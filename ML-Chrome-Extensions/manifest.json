@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Deepfake Detector",
+  "version": "1.2",
+  "description": "Detect deepfakes in audio, video and text using backend ML models.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://your-ml-api.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  }
+}
