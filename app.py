@@ -10,10 +10,10 @@ import librosa
 import numpy as np
 import tensorflow as tf
 from sklearn.feature_extraction.text import TfidfVectorizer
-from openai import OpenAI
 import lime
 from lime import lime_text
 from lime.lime_image import LimeImageExplainer
+import google.generativeai as genai
 
 warnings.filterwarnings('ignore')
 
@@ -23,11 +23,12 @@ warnings.filterwarnings('ignore')
 app = Flask(__name__)
 CORS(app)
 
-# OpenAI client
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Gemini client
+genai.configure(api_key=os.getenv("AIzaSyAImUuxo1t3jipw2IF0AY5FB5-N4y8enzg"))
+gemini_model = genai.GenerativeModel("gemini-1.5-flash")
 
 # ------------------------
-# Explanation Engine (OpenAI instead of Ollama)
+# Explanation Engine (Gemini)
 # ------------------------
 class ExplanationLayerOSS:
     CONFIDENCE_MAP = {
@@ -95,18 +96,13 @@ class ExplanationLayerOSS:
         why_misleading, visible_signs, verification_steps, educational_tip, summary
         """
 
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}]
-        )
-
-        llm_explanation = response.choices[0].message.content
+        response = gemini_model.generate_content(prompt)
 
         return {
             "verdict": "suspicious",
             "confidence_summary": [self._confidence_label(out.get("score", 0.0)) for out in model_outputs],
             "technical_reasons": reasons,
-            "llm_explanation": llm_explanation,
+            "llm_explanation": response.text
         }
 
 engine = ExplanationLayerOSS()
@@ -124,7 +120,7 @@ def explain():
 
 
 # ------------------------
-# MODEL LOADING HELPERS
+# MODEL LOADING HELPERS (same as before)
 # ------------------------
 def load_pickle_model(path):
     if os.path.exists(path):
@@ -143,12 +139,10 @@ def load_keras_model(path):
             print(f"[ERROR] Failed to load {path}: {str(e)}")
     return None
 
-# Create dirs
 os.makedirs("modeltext/checkpoints", exist_ok=True)
 os.makedirs("visual", exist_ok=True)
 os.makedirs("audio/checkpoints", exist_ok=True)
 
-# Load models
 text_model = load_pickle_model("modeltext/checkpoints/model.pkl")
 text_vectorizer = load_pickle_model("modeltext/checkpoints/vectorizer.pkl")
 visual_model = load_keras_model("visual/vit_deepfake_visual.h5")
@@ -158,7 +152,7 @@ if text_vectorizer is None:
     text_vectorizer = TfidfVectorizer(max_features=5000, stop_words='english', ngram_range=(1,2))
 
 # ------------------------
-# EXPLANATION HELPERS
+# EXPLANATION HELPERS (same as before)
 # ------------------------
 def generate_text_explanation(text, model, vectorizer, prediction_prob):
     try:
@@ -207,7 +201,7 @@ def generate_audio_explanation(audio_features, model, audio_duration, prediction
         return {"error": f"Audio explanation error: {str(e)}"}
 
 # ------------------------
-# ROUTES
+# ROUTES (same as before: /, /health, /check/text, /check/image, /check/audio)
 # ------------------------
 @app.route("/", methods=["GET"])
 def home():
