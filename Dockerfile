@@ -28,4 +28,4 @@ ENV GEMINI_API_KEY="AIzaSyAImUuxo1t3jipw2IF0AY5FB5-N4y8enzg"
 EXPOSE 8080
 
 # Run Flask
-CMD ["python", "app.py"]
+CMD ["gunicorn", "-b", "0.0.0.0:8080", "app:app"]
