@@ -57,7 +57,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         try {
             // 1️⃣ Call ML detection backend
-            const response = await fetch("https://your-ml-api.com/detect", {
+            const response = await fetch("https://deepfake-api-217279920936.us-central1.run.app/explain", {
                 method: "POST",
                 body: formData
             });
@@ -95,4 +95,5 @@ document.addEventListener("DOMContentLoaded", () => {
             runDetectionBtn.textContent = "Run Detection";
         }
     });
+
 });
