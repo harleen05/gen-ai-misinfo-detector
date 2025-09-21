@@ -20,7 +20,7 @@ This project is designed to tackle one of the most urgent problems of the digita
   - Outputs are packaged as a **single JSON response** with verdict, confidence, reasons, and explanations  
 
 - **User Feedback & Display**  
-  - Verdict badge: 🛡 Real / Safe or ⚠️ Fake / Risky  
+  - Verdict badge:  Real / Safe or  Fake / Risky  
   - Clear, human-readable reasoning  
   Users see *not just the verdict, but also why*.  
 
