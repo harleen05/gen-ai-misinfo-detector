@@ -1,4 +1,6 @@
-## 🔄 Workflow
+This project is designed to tackle one of the most urgent problems of the digital age: the spread of fake news, deepfakes, and manipulated content across text, images, video, and audio. Our solution brings together cutting-edge AI models with a user-first browser extension, making deepfake detection and misinformation verification accessible, clear, and actionable for everyone.
+
+##  Workflow
 
 - **User Encounter**  
   Starts in the browser when a user finds text, image, video, or audio they want to verify.  
@@ -24,4 +26,7 @@
 
 - **Continuous Learning**  
   Optional (secure & Wt&B) logging of results + feedback.  
-  Models adapt to new attack patterns and improve explanations over time.  
+  Models adapt to new attack patterns and improve explanations over time.
+
+
+Our project combines robust multi-modal AI detection with seamless browser integration and industry-leading explainability, empowering users to spot, understand, and protect themselves from fake and manipulated content in real time.
