@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y \
 
 # Copy requirements first and install
 RUN pip install --upgrade pip setuptools wheel
-RUN pip install --no-cache-dir --ignore-installed -r /Users/monicakapoor/gen-ai-misinfo-detector/requirements.txt
+RUN pip install --no-cache-dir --ignore-installed -r gen-ai-misinfo-detector/requirements.txt
 
 
 # Copy app code
