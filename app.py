@@ -14,6 +14,10 @@ import lime
 from lime import lime_text
 from lime.lime_image import LimeImageExplainer
 import google.generativeai as genai
+import joblib
+import soundfile as sf
+import torch
+import torch.nn.functional as F
 
 warnings.filterwarnings('ignore')
 
@@ -118,12 +122,9 @@ def explain():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 # ------------------------
-# MODEL LOADING HELPERS (same as before)
+# MODEL LOADING HELPERS
 # ------------------------
-import joblib
-
 def load_pickle_model(path):
     if os.path.exists(path):
         try:
@@ -135,7 +136,6 @@ def load_pickle_model(path):
 def load_keras_model(path, input_shape=(224,224,3), num_classes=2):
     if os.path.exists(path):
         try:
-            # Try loading full model
             return tf.keras.models.load_model(path)
         except Exception as e:
             print(f"[WARN] {path} not a full model, trying weights-only: {str(e)}")
@@ -151,32 +151,37 @@ def load_keras_model(path, input_shape=(224,224,3), num_classes=2):
                 print(f"[ERROR] Could not load {path}: {str(e2)}")
     return None
 
-import soundfile as sf
+def load_torch_model(path, map_location="cpu"):
+    if os.path.exists(path):
+        try:
+            model = torch.load(path, map_location=map_location)
+            model.eval()
+            return model
+        except Exception as e:
+            print(f"[ERROR] Could not load torch model {path}: {str(e)}")
+    return None
 
 def load_audio_file(path, target_sr=16000):
-    """
-    Robust audio loader for wav, mp3, flac, etc.
-    - Always resamples to target_sr (default 16kHz).
-    - Ensures mono waveform.
-    """
     try:
         y, sr = librosa.load(path, sr=target_sr, mono=True)
     except Exception as e:
         print(f"[WARN] Librosa failed, falling back to soundfile: {e}")
-        y, sr = sf.read(path)  
-        if y.ndim > 1:  
+        y, sr = sf.read(path)
+        if y.ndim > 1:
             y = np.mean(y, axis=1)
         if sr != target_sr:
             y = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
             sr = target_sr
     return y, sr
 
-
+# ------------------------
+# LOAD MODELS
+# ------------------------
 os.makedirs("modeltext/checkpoints", exist_ok=True)
 os.makedirs("visual", exist_ok=True)
 os.makedirs("audio/checkpoints", exist_ok=True)
 
-text_model = load_pickle_model("modeltext/checkpoints/model.pkl")
+text_model = load_torch_model("modeltext/checkpoints/model.pkl")
 text_vectorizer = load_pickle_model("modeltext/checkpoints/vectorizer.pkl")
 visual_model = load_keras_model("visual/vit_deepfake_visual.h5")
 audio_model = load_pickle_model("audio/checkpoints/best_model.pkl")
@@ -185,15 +190,19 @@ if text_vectorizer is None:
     text_vectorizer = TfidfVectorizer(max_features=5000, stop_words='english', ngram_range=(1,2))
 
 # ------------------------
-# EXPLANATION HELPERS 
+# EXPLANATION HELPERS
 # ------------------------
 def generate_text_explanation(text, model, vectorizer, prediction_prob):
     try:
-        if model and vectorizer and hasattr(model, "predict_proba"):
+        if model and vectorizer:
             explainer = lime_text.LimeTextExplainer(class_names=["Real", "Fake"])
             def predict_proba_fn(texts):
-                features = vectorizer.transform(texts)
-                return model.predict_proba(features)
+                feats = vectorizer.transform(texts).toarray()
+                x = torch.tensor(feats, dtype=torch.float32)
+                with torch.no_grad():
+                    logits = model(x)
+                    probs = F.softmax(logits, dim=1).cpu().numpy()
+                return probs
             exp = explainer.explain_instance(text, predict_proba_fn, num_features=10)
             explanation_data = []
             for word, importance in exp.as_list():
@@ -234,7 +243,7 @@ def generate_audio_explanation(audio_features, model, audio_duration, prediction
         return {"error": f"Audio explanation error: {str(e)}"}
 
 # ------------------------
-# ROUTES (same as before: /, /health, /check/text, /check/image, /check/audio)
+# ROUTES
 # ------------------------
 @app.route("/", methods=["GET"])
 def home():
@@ -258,16 +267,22 @@ def check_text():
     text = data.get("content", "")
     if not text.strip():
         return jsonify({"error": "No text provided"}), 400
+
     pred, proba = 0, 0.5
-    if text_model:
+    if text_model and text_vectorizer:
         try:
-            features = text_vectorizer.transform([text])
-            pred = text_model.predict(features)[0]
-            proba = text_model.predict_proba(features)[0].max()
-        except:
-            pass
-    explanation = generate_text_explanation(text, text_model, text_vectorizer, float(proba))
-    return jsonify({"type": "text", "verdict": "fake" if pred==1 else "real", "confidence": float(proba), "explanation": explanation})
+            feats = text_vectorizer.transform([text]).toarray()
+            x = torch.tensor(feats, dtype=torch.float32)
+            with torch.no_grad():
+                logits = text_model(x)
+                probs = F.softmax(logits, dim=1).cpu().numpy()[0]
+            pred = int(np.argmax(probs))
+            proba = float(np.max(probs))
+        except Exception as e:
+            print(f"[ERROR] Text prediction failed: {e}")
+
+    explanation = generate_text_explanation(text, text_model, text_vectorizer, proba)
+    return jsonify({"type": "text", "verdict": "fake" if pred==1 else "real", "confidence": proba, "explanation": explanation})
 
 @app.route("/check/image", methods=["POST"])
 def check_image():
@@ -296,11 +311,9 @@ def check_audio():
     temp_path = f"/tmp/{file.filename}"
     file.save(temp_path)
 
-    # 🔧 Use robust loader
     y, sr = load_audio_file(temp_path, target_sr=16000)
     os.remove(temp_path)
 
-    # Feature extraction (must match training)
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=40)
     features = np.mean(mfcc.T, axis=0).reshape(1, -1)
 
