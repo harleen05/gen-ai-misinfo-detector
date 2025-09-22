@@ -151,15 +151,33 @@ def load_keras_model(path, input_shape=(224,224,3), num_classes=2):
                 print(f"[ERROR] Could not load {path}: {str(e2)}")
     return None
 
-def load_torch_model(path, map_location="cpu"):
+# Define same architecture used during training
+class TextClassifier(torch.nn.Module):
+    def __init__(self, input_dim=5000, hidden_dim=128, num_classes=2):
+        super(TextClassifier, self).__init__()
+        self.fc1 = torch.nn.Linear(input_dim, hidden_dim)
+        self.relu = torch.nn.ReLU()
+        self.fc2 = torch.nn.Linear(hidden_dim, num_classes)
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.relu(x)
+        x = self.fc2(x)
+        return x
+
+def load_torch_model(path, input_dim=5000, hidden_dim=128, num_classes=2, map_location="cpu"):
     if os.path.exists(path):
         try:
-            model = torch.load(path, map_location=map_location)
+            model = TextClassifier(input_dim=input_dim, hidden_dim=hidden_dim, num_classes=num_classes)
+            state_dict = torch.load(path, map_location=map_location)
+            model.load_state_dict(state_dict)
             model.eval()
             return model
         except Exception as e:
-            print(f"[ERROR] Could not load torch model {path}: {str(e)}")
+            print(f"[ERROR] Could not load state_dict from {path}: {str(e)}")
     return None
+
+text_model = load_torch_state_dict("modeltext/checkpoints/model.pkl")
 
 def load_audio_file(path, target_sr=16000):
     try:
