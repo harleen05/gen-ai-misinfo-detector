@@ -24,7 +24,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Gemini client
-genai.configure(api_key=os.getenv("AIzaSyAImUuxo1t3jipw2IF0AY5FB5-N4y8enzg"))
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 gemini_model = genai.GenerativeModel("gemini-1.5-flash")
 
 # ------------------------
@@ -122,22 +122,55 @@ def explain():
 # ------------------------
 # MODEL LOADING HELPERS (same as before)
 # ------------------------
+import joblib
+
 def load_pickle_model(path):
     if os.path.exists(path):
         try:
-            with open(path, 'rb') as f:
-                return pickle.load(f)
+            return joblib.load(path)
         except Exception as e:
             print(f"[ERROR] Failed to load {path}: {str(e)}")
     return None
 
-def load_keras_model(path):
+def load_keras_model(path, input_shape=(224,224,3), num_classes=2):
     if os.path.exists(path):
         try:
+            # Try loading full model
             return tf.keras.models.load_model(path)
         except Exception as e:
-            print(f"[ERROR] Failed to load {path}: {str(e)}")
+            print(f"[WARN] {path} not a full model, trying weights-only: {str(e)}")
+            try:
+                base = tf.keras.applications.EfficientNetB0(
+                    include_top=False, input_shape=input_shape, pooling="avg"
+                )
+                x = tf.keras.layers.Dense(num_classes, activation="softmax")(base.output)
+                model = tf.keras.Model(inputs=base.input, outputs=x)
+                model.load_weights(path)
+                return model
+            except Exception as e2:
+                print(f"[ERROR] Could not load {path}: {str(e2)}")
     return None
+
+import soundfile as sf
+
+def load_audio_file(path, target_sr=16000):
+    """
+    Robust audio loader for wav, mp3, flac, etc.
+    - Always resamples to target_sr (default 16kHz).
+    - Ensures mono waveform.
+    """
+    try:
+        y, sr = librosa.load(path, sr=target_sr, mono=True)
+    except Exception as e:
+        print(f"[WARN] Librosa failed, falling back to soundfile: {e}")
+        y, sr = sf.read(path)  
+        if y.ndim > 1:  
+            y = np.mean(y, axis=1)
+        if sr != target_sr:
+            y = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
+            sr = target_sr
+    return y, sr
+
 
 os.makedirs("modeltext/checkpoints", exist_ok=True)
 os.makedirs("visual", exist_ok=True)
@@ -152,7 +185,7 @@ if text_vectorizer is None:
     text_vectorizer = TfidfVectorizer(max_features=5000, stop_words='english', ngram_range=(1,2))
 
 # ------------------------
-# EXPLANATION HELPERS (same as before)
+# EXPLANATION HELPERS 
 # ------------------------
 def generate_text_explanation(text, model, vectorizer, prediction_prob):
     try:
@@ -262,16 +295,28 @@ def check_audio():
     file = request.files["file"]
     temp_path = f"/tmp/{file.filename}"
     file.save(temp_path)
-    y, sr = librosa.load(temp_path, sr=16000)
+
+    # 🔧 Use robust loader
+    y, sr = load_audio_file(temp_path, target_sr=16000)
     os.remove(temp_path)
+
+    # Feature extraction (must match training)
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=40)
     features = np.mean(mfcc.T, axis=0).reshape(1, -1)
+
     pred, proba = 0, 0.5
     if audio_model:
         pred = audio_model.predict(features)[0]
         proba = audio_model.predict_proba(features)[0].max()
+
     explanation = generate_audio_explanation(features, audio_model, float(len(y)/sr), float(proba))
-    return jsonify({"type": "audio", "verdict": "fake" if pred==1 else "real", "confidence": float(proba), "duration": float(len(y)/sr), "explanation": explanation})
+    return jsonify({
+        "type": "audio",
+        "verdict": "real" if pred == 1 else "fake",
+        "confidence": float(proba),
+        "duration": float(len(y) / sr),
+        "explanation": explanation
+    })
 
 # ------------------------
 # RUN APP

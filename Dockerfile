@@ -1,31 +1,31 @@
-# Use Python slim image
-FROM python:3.10-slim
+# Use TensorFlow base image so TF is already installed
+FROM tensorflow/tensorflow:2.15.0
 
 # Prevent interactive prompts
 ENV PYTHONUNBUFFERED True
 
-# Set work directory
+# Set working directory
 WORKDIR /app
 
-# Install system dependencies (needed for librosa, PIL, etc.)
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first
+# Copy requirements first and install
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy all app files
+# Copy app code
 COPY . .
 
-# Set environment variables
+# Environment variables
 ENV PORT 8080
-ENV GEMINI_API_KEY=AIzaSyAImUuxo1t3jipw2IF0AY5FB5-N4y8enzg
+ENV GEMINI_API_KEY=your-gemini-api-key-here
 
-# Expose port
+# Expose API port
 EXPOSE 8080
 
-# Run Flask
+# Run Flask app via Gunicorn
 CMD ["gunicorn", "-b", "0.0.0.0:8080", "app:app"]
