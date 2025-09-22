@@ -1,3 +1,4 @@
+# Core web server
 flask==3.0.3
 flask-cors==4.0.1
 gunicorn==23.0.0
@@ -16,7 +17,7 @@ pandas==2.2.2
 numpy==1.26.4
 tqdm==4.67.1
 
-# Audio/Image/Video
+# Audio/Image
 librosa==0.10.1
 Pillow==10.2.0
 
@@ -24,5 +25,8 @@ Pillow==10.2.0
 openai==1.37.1
 google-generativeai==0.7.2
 
-# TensorBoard (optional but useful for TF models)
+# TensorBoard
 tensorboard==2.15.2
+
+# Explicitly pin blinker to avoid system conflict
+blinker==1.7.0
