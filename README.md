@@ -1,12 +1,14 @@
 This project is designed to tackle one of the most urgent problems of the digital age: the spread of fake news, deepfakes, and manipulated content across text, images, video, and audio. Our solution brings together cutting-edge AI models with a user-first browser extension, making deepfake detection and misinformation verification accessible, clear, and actionable for everyone.
 
+Deployment link: https://gen-ai-misinfo-detector.vercel.app/
+
 ##  Workflow
 
 - **User Encounter**  
   Starts in the browser when a user finds text, image, video, or audio they want to verify.  
 
 - **Chrome Extension Activation**  
-  With one click, the lightweight extension extracts the content and securely forwards it to the cloud backend.  
+  With one click, the lightweight extension extracts the content and securely forwards it to the cloud backend. As of now its build in the form of a website but soon we will be     converting it to a chrome extension 
 
 - **Multi-Modal AI Analysis**  
   - **Vision Transformer (ViT):** Image & video frame deepfake detection  
