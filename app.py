@@ -17,6 +17,7 @@ import google.generativeai as genai
 import joblib
 import soundfile as sf
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
 warnings.filterwarnings('ignore')
@@ -27,9 +28,16 @@ warnings.filterwarnings('ignore')
 app = Flask(__name__)
 CORS(app)
 
+# ------------------------
 # Gemini client
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+# ------------------------
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+    gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+else:
+    gemini_model = None
+    print("[WARN] GEMINI_API_KEY not set. /explain will return an error.")
 
 # ------------------------
 # Explanation Engine (Gemini)
@@ -100,13 +108,25 @@ class ExplanationLayerOSS:
         why_misleading, visible_signs, verification_steps, educational_tip, summary
         """
 
-        response = gemini_model.generate_content(prompt)
+        if gemini_model is None:
+            return {
+                "verdict": "suspicious",
+                "confidence_summary": [self._confidence_label(out.get("score", 0.0)) for out in model_outputs],
+                "technical_reasons": reasons,
+                "llm_explanation": "Gemini API key not configured; LLM explanation unavailable."
+            }
+
+        try:
+            response = gemini_model.generate_content(prompt)
+            llm_text = response.text
+        except Exception as e:
+            llm_text = f"LLM explanation call failed: {str(e)}"
 
         return {
             "verdict": "suspicious",
             "confidence_summary": [self._confidence_label(out.get("score", 0.0)) for out in model_outputs],
             "technical_reasons": reasons,
-            "llm_explanation": response.text
+            "llm_explanation": llm_text
         }
 
 engine = ExplanationLayerOSS()
@@ -114,9 +134,13 @@ engine = ExplanationLayerOSS()
 @app.route("/explain", methods=["POST"])
 def explain():
     try:
-        data = request.get_json()
+        data = request.get_json(force=True)
         outputs = data.get("model_outputs", [])
         mode = data.get("mode", "general")
+
+        if not outputs:
+            return jsonify({"error": "model_outputs is required and cannot be empty"}), 400
+
         result = engine.generate_explanation(outputs, mode)
         return jsonify(result)
     except Exception as e:
@@ -128,15 +152,21 @@ def explain():
 def load_pickle_model(path):
     if os.path.exists(path):
         try:
-            return joblib.load(path)
+            model = joblib.load(path)
+            print(f"[INFO] Loaded pickle model from {path}")
+            return model
         except Exception as e:
             print(f"[ERROR] Failed to load {path}: {str(e)}")
+    else:
+        print(f"[WARN] Pickle model path not found: {path}")
     return None
 
-def load_keras_model(path, input_shape=(224,224,3), num_classes=2):
+def load_keras_model(path, input_shape=(224, 224, 3), num_classes=2):
     if os.path.exists(path):
         try:
-            return tf.keras.models.load_model(path)
+            model = tf.keras.models.load_model(path)
+            print(f"[INFO] Loaded Keras model from {path}")
+            return model
         except Exception as e:
             print(f"[WARN] {path} not a full model, trying weights-only: {str(e)}")
             try:
@@ -146,18 +176,21 @@ def load_keras_model(path, input_shape=(224,224,3), num_classes=2):
                 x = tf.keras.layers.Dense(num_classes, activation="softmax")(base.output)
                 model = tf.keras.Model(inputs=base.input, outputs=x)
                 model.load_weights(path)
+                print(f"[INFO] Loaded EfficientNetB0 weights from {path}")
                 return model
             except Exception as e2:
                 print(f"[ERROR] Could not load {path}: {str(e2)}")
+    else:
+        print(f"[WARN] Keras model path not found: {path}")
     return None
 
 # Define same architecture used during training
-class TextClassifier(torch.nn.Module):
+class TextClassifier(nn.Module):
     def __init__(self, input_dim=5000, hidden_dim=128, num_classes=2):
         super(TextClassifier, self).__init__()
-        self.fc1 = torch.nn.Linear(input_dim, hidden_dim)
-        self.relu = torch.nn.ReLU()
-        self.fc2 = torch.nn.Linear(hidden_dim, num_classes)
+        self.fc1 = nn.Linear(input_dim, hidden_dim)
+        self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(hidden_dim, num_classes)
 
     def forward(self, x):
         x = self.fc1(x)
@@ -172,12 +205,13 @@ def load_torch_model(path, input_dim=5000, hidden_dim=128, num_classes=2, map_lo
             state_dict = torch.load(path, map_location=map_location)
             model.load_state_dict(state_dict)
             model.eval()
+            print(f"[INFO] Loaded Torch model from {path}")
             return model
         except Exception as e:
             print(f"[ERROR] Could not load state_dict from {path}: {str(e)}")
+    else:
+        print(f"[WARN] Torch model path not found: {path}")
     return None
-
-text_model = load_torch_state_dict("modeltext/checkpoints/model.pkl")
 
 def load_audio_file(path, target_sr=16000):
     try:
@@ -193,53 +227,68 @@ def load_audio_file(path, target_sr=16000):
     return y, sr
 
 # ------------------------
-# LOAD MODELS
+# LOAD MODELS (REQUIRED)
 # ------------------------
 os.makedirs("modeltext/checkpoints", exist_ok=True)
 os.makedirs("visual", exist_ok=True)
 os.makedirs("audio/checkpoints", exist_ok=True)
 
-text_model = load_torch_model("modeltext/checkpoints/model.pkl")
-text_vectorizer = load_pickle_model("modeltext/checkpoints/vectorizer.pkl")
-visual_model = load_keras_model("visual/vit_deepfake_visual.h5")
-audio_model = load_pickle_model("audio/checkpoints/best_model.pkl")
+# text: assume class index 0 = real, 1 = fake (common convention)
+TEXT_MODEL_PATH = "modeltext/checkpoints/model.pkl"
+TEXT_VECTORIZER_PATH = "modeltext/checkpoints/vectorizer.pkl"
+
+# image: assume class index 0 = real, 1 = fake
+VISUAL_MODEL_PATH = "visual/vit_deepfake_visual.h5"
+
+# audio: your original code assumed pred == 1 -> real; otherwise fake
+AUDIO_MODEL_PATH = "audio/checkpoints/best_model.pkl"
+
+text_model = load_torch_model(TEXT_MODEL_PATH)
+text_vectorizer = load_pickle_model(TEXT_VECTORIZER_PATH)
+visual_model = load_keras_model(VISUAL_MODEL_PATH)
+audio_model = load_pickle_model(AUDIO_MODEL_PATH)
 
 if text_vectorizer is None:
-    text_vectorizer = TfidfVectorizer(max_features=5000, stop_words='english', ngram_range=(1,2))
+    # Only as a placeholder to avoid attribute errors; endpoints will still error if not fitted.
+    text_vectorizer = TfidfVectorizer(max_features=5000, stop_words='english', ngram_range=(1, 2))
+    print("[WARN] text_vectorizer.pkl missing; a new TfidfVectorizer was created but NOT fitted. /check/text will likely fail.")
 
 # ------------------------
 # EXPLANATION HELPERS
 # ------------------------
 def generate_text_explanation(text, model, vectorizer, prediction_prob):
     try:
-        if model and vectorizer:
-            explainer = lime_text.LimeTextExplainer(class_names=["Real", "Fake"])
-            def predict_proba_fn(texts):
-                feats = vectorizer.transform(texts).toarray()
-                x = torch.tensor(feats, dtype=torch.float32)
-                with torch.no_grad():
-                    logits = model(x)
-                    probs = F.softmax(logits, dim=1).cpu().numpy()
-                return probs
-            exp = explainer.explain_instance(text, predict_proba_fn, num_features=10)
-            explanation_data = []
-            for word, importance in exp.as_list():
-                explanation_data.append({
-                    "word": word,
-                    "importance": float(importance),
-                    "contribution": "supports_fake" if importance > 0 else "supports_real"
-                })
-            return {
-                "method": "LIME",
-                "top_features": sorted(explanation_data, key=lambda x: abs(x['importance']), reverse=True)[:10]
-            }
-        else:
-            return {"method": "Statistical Analysis", "note": "Fallback explanation"}
+        if model is None or vectorizer is None:
+            return {"method": "LIME", "error": "Text model or vectorizer not loaded"}
+
+        explainer = lime_text.LimeTextExplainer(class_names=["Real", "Fake"])
+
+        def predict_proba_fn(texts):
+            feats = vectorizer.transform(texts).toarray()
+            x = torch.tensor(feats, dtype=torch.float32)
+            with torch.no_grad():
+                logits = model(x)
+                probs = F.softmax(logits, dim=1).cpu().numpy()
+            return probs
+
+        exp = explainer.explain_instance(text, predict_proba_fn, num_features=10)
+        explanation_data = []
+        for word, importance in exp.as_list():
+            explanation_data.append({
+                "word": word,
+                "importance": float(importance),
+                "contribution": "supports_fake" if importance > 0 else "supports_real"
+            })
+        return {
+            "method": "LIME",
+            "top_features": sorted(explanation_data, key=lambda x: abs(x['importance']), reverse=True)[:10]
+        }
     except Exception as e:
-        return {"error": f"Text explanation error: {str(e)}"}
+        return {"method": "LIME", "error": f"Text explanation error: {str(e)}"}
 
 def generate_image_explanation(image_array, model, prediction_prob):
     try:
+        # Placeholder: LIME image explainer could be added here later
         img = image_array[0] if len(image_array.shape) == 4 else image_array
         h, w, c = img.shape
         return {
@@ -255,7 +304,7 @@ def generate_audio_explanation(audio_features, model, audio_duration, prediction
         return {
             "method": "Audio Feature Analysis",
             "duration_seconds": audio_duration,
-            "feature_count": len(audio_features[0])
+            "feature_count": int(audio_features.shape[1]) if len(audio_features.shape) == 2 else int(len(audio_features))
         }
     except Exception as e:
         return {"error": f"Audio explanation error: {str(e)}"}
@@ -275,77 +324,155 @@ def health_check():
             "text": text_model is not None,
             "text_vectorizer": text_vectorizer is not None,
             "visual": visual_model is not None,
-            "audio": audio_model is not None
+            "audio": audio_model is not None,
+            "gemini": gemini_model is not None
         }
     })
 
+# ------------------------
+# TEXT CHECK
+# ------------------------
 @app.route("/check/text", methods=["POST"])
 def check_text():
-    data = request.get_json()
+    if text_model is None or text_vectorizer is None:
+        return jsonify({"error": "Text detection model or vectorizer not loaded"}), 500
+
+    data = request.get_json(force=True)
     text = data.get("content", "")
     if not text.strip():
         return jsonify({"error": "No text provided"}), 400
 
-    pred, proba = 0, 0.5
-    if text_model and text_vectorizer:
-        try:
-            feats = text_vectorizer.transform([text]).toarray()
-            x = torch.tensor(feats, dtype=torch.float32)
-            with torch.no_grad():
-                logits = text_model(x)
-                probs = F.softmax(logits, dim=1).cpu().numpy()[0]
-            pred = int(np.argmax(probs))
-            proba = float(np.max(probs))
-        except Exception as e:
-            print(f"[ERROR] Text prediction failed: {e}")
+    try:
+        feats = text_vectorizer.transform([text]).toarray()
+    except Exception as e:
+        return jsonify({"error": f"Text vectorizer not fitted or incompatible: {str(e)}"}), 500
 
-    explanation = generate_text_explanation(text, text_model, text_vectorizer, proba)
-    return jsonify({"type": "text", "verdict": "fake" if pred==1 else "real", "confidence": proba, "explanation": explanation})
+    try:
+        x = torch.tensor(feats, dtype=torch.float32)
+        with torch.no_grad():
+            logits = text_model(x)
+            probs = F.softmax(logits, dim=1).cpu().numpy()[0]
+        pred_idx = int(np.argmax(probs))
+        confidence = float(probs[pred_idx])
+    except Exception as e:
+        return jsonify({"error": f"Text prediction failed: {str(e)}"}), 500
 
+    # Assumption: class index 1 = fake, 0 = real
+    verdict = "fake" if pred_idx == 1 else "real"
+
+    explanation = generate_text_explanation(text, text_model, text_vectorizer, confidence)
+    return jsonify({
+        "type": "text",
+        "verdict": verdict,
+        "confidence": confidence,
+        "raw_probs": probs.tolist(),
+        "prediction_index": pred_idx,
+        "explanation": explanation
+    })
+
+# ------------------------
+# IMAGE CHECK
+# ------------------------
 @app.route("/check/image", methods=["POST"])
 def check_image():
-    data = request.get_json()
+    if visual_model is None:
+        return jsonify({"error": "Visual deepfake model not loaded"}), 500
+
+    data = request.get_json(force=True)
     img_b64 = data.get("image", "")
     if not img_b64:
         return jsonify({"error": "No image provided"}), 400
-    if img_b64.startswith("data:image"):
-        img_b64 = img_b64.split(",")[1]
-    img = Image.open(io.BytesIO(base64.b64decode(img_b64))).convert("RGB")
-    img_resized = img.resize((224,224))
-    img_arr = np.expand_dims(np.array(img_resized)/255.0, axis=0)
-    pred_class, confidence = 0, 0.5
-    if visual_model:
-        pred = visual_model.predict(img_arr)[0]
-        confidence = float(np.max(pred))
-        pred_class = int(np.argmax(pred))
-    explanation = generate_image_explanation(img_arr, visual_model, confidence)
-    return jsonify({"type": "image", "verdict": "fake" if pred_class==1 else "real", "confidence": confidence, "explanation": explanation})
 
+    try:
+        if img_b64.startswith("data:image"):
+            img_b64 = img_b64.split(",")[1]
+        img_bytes = base64.b64decode(img_b64)
+        img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+    except Exception as e:
+        return jsonify({"error": f"Invalid image data: {str(e)}"}), 400
+
+    img_resized = img.resize((224, 224))
+    img_arr = np.expand_dims(np.array(img_resized) / 255.0, axis=0)
+
+    try:
+        pred = visual_model.predict(img_arr)[0]
+        pred_idx = int(np.argmax(pred))
+        confidence = float(pred[pred_idx])
+    except Exception as e:
+        return jsonify({"error": f"Image prediction failed: {str(e)}"}), 500
+
+    # Assumption: class index 1 = fake, 0 = real
+    verdict = "fake" if pred_idx == 1 else "real"
+
+    explanation = generate_image_explanation(img_arr, visual_model, confidence)
+    return jsonify({
+        "type": "image",
+        "verdict": verdict,
+        "confidence": confidence,
+        "raw_probs": pred.tolist(),
+        "prediction_index": pred_idx,
+        "explanation": explanation
+    })
+
+# ------------------------
+# AUDIO CHECK
+# ------------------------
 @app.route("/check/audio", methods=["POST"])
 def check_audio():
+    if audio_model is None:
+        return jsonify({"error": "Audio deepfake model not loaded"}), 500
+
     if "file" not in request.files:
         return jsonify({"error": "No audio file uploaded"}), 400
     file = request.files["file"]
-    temp_path = f"/tmp/{file.filename}"
-    file.save(temp_path)
 
-    y, sr = load_audio_file(temp_path, target_sr=16000)
-    os.remove(temp_path)
+    if not file.filename:
+        return jsonify({"error": "Empty filename"}), 400
+
+    temp_path = f"/tmp/{file.filename}"
+    try:
+        file.save(temp_path)
+    except Exception as e:
+        return jsonify({"error": f"Failed to save uploaded file: {str(e)}"}), 500
+
+    try:
+        y, sr = load_audio_file(temp_path, target_sr=16000)
+    except Exception as e:
+        os.remove(temp_path)
+        return jsonify({"error": f"Failed to read audio file: {str(e)}"}), 500
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+    if y is None or len(y) == 0:
+        return jsonify({"error": "Empty audio signal"}), 400
 
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=40)
     features = np.mean(mfcc.T, axis=0).reshape(1, -1)
 
-    pred, proba = 0, 0.5
-    if audio_model:
-        pred = audio_model.predict(features)[0]
-        proba = audio_model.predict_proba(features)[0].max()
+    try:
+        if hasattr(audio_model, "predict_proba"):
+            class_proba = audio_model.predict_proba(features)[0]
+            pred_idx = int(np.argmax(class_proba))
+            confidence = float(class_proba[pred_idx])
+        else:
+            # If the model doesn't support predict_proba, just get the label
+            pred_idx = int(audio_model.predict(features)[0])
+            confidence = 1.0  # unknown, treat as max-conf since no probs
+    except Exception as e:
+        return jsonify({"error": f"Audio prediction failed: {str(e)}"}), 500
 
-    explanation = generate_audio_explanation(features, audio_model, float(len(y)/sr), float(proba))
+    # Your original logic: pred == 1 -> real, else fake
+    verdict = "real" if pred_idx == 1 else "fake"
+
+    explanation = generate_audio_explanation(features, audio_model, float(len(y) / sr), float(confidence))
     return jsonify({
         "type": "audio",
-        "verdict": "real" if pred == 1 else "fake",
-        "confidence": float(proba),
+        "verdict": verdict,
+        "confidence": float(confidence),
         "duration": float(len(y) / sr),
+        "prediction_index": pred_idx,
+        "raw_probs": class_proba.tolist() if 'class_proba' in locals() else None,
         "explanation": explanation
     })
 
@@ -353,4 +480,5 @@ def check_audio():
 # RUN APP
 # ------------------------
 if __name__ == "__main__":
+    # In production, set debug=False
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), debug=True)
